@@ -38,6 +38,7 @@ try { state.session = JSON.parse(sessionStorage.getItem('sendfile-admin') || 'nu
 const fragment = new URLSearchParams(location.hash.slice(1));
 const portalToken = fragment.get('send');
 const customerOnly = Boolean(portalToken);
+if(live&&!customerOnly)state.view='customers';
 const demoCustomers = [
  {id:'demo-1',name:'บริษัท ตัวอย่าง สตูดิโอ จำกัด',code:'SF-001',drive_folder_id:null},
  {id:'demo-2',name:'บริษัท กรีนเดย์ จำกัด',code:'SF-002',drive_folder_id:null},
@@ -218,3 +219,4 @@ window.addEventListener('beforeunload',ev=>{if(state.sending){ev.preventDefault(
 render();
 if(live&&portalToken){state.loading=true;render();api('portal-info',{token:portalToken}).then(data=>{state.customer=data.customer;state.driveReady=true;}).catch(err=>state.portalError=err.message).finally(()=>{state.loading=false;render();});}
 else if(portalToken&&!live){state.portalError='ระบบรับเอกสารจริงยังไม่ได้ตั้งค่า ลิงก์นี้ยังใช้งานไม่ได้';render();}
+else if(live&&state.session)refreshAdmin();
