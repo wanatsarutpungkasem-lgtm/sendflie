@@ -6,7 +6,7 @@
 
 - หน้ารับเอกสาร / ลูกค้า / เอกสาร / การเชื่อมต่อ พร้อมให้ทดลอง
 - เพิ่มตาราง Sendfile ใน Supabase `testwebsite` แล้ว โดยไม่เปลี่ยนตาราง `file_uploads` เดิม
-- Edge Function `sendfile-portal` deploy แล้ว แต่ยังไม่มี Google OAuth secrets และบัญชีผู้ดูแล
+- Edge Function `sendfile-portal` deploy แล้ว ผู้ใช้ตั้งค่า Google OAuth secrets และกำหนดบัญชีผู้ดูแลแล้ว ยังต้องตรวจสิทธิ์โฟลเดอร์และทดสอบส่งไฟล์จริง
 - โฟลเดอร์หลักที่ผู้ใช้เลือก: https://drive.google.com/drive/folders/13g59K6moZp6Go7NnkaWoSsq5ORgbAo_p
 - หน้าหลักตั้ง `demoMode: true` จึงไม่ส่งหรือเก็บไฟล์จริง การทดลองไม่เพิ่มเอกสารลงฐานข้อมูล
 - ยังต้องตั้ง Google OAuth และกำหนดผู้ดูแลก่อนเปิดรับไฟล์จริง ยังไม่ผ่าน end-to-end ทดสอบกับ Drive จริง
@@ -37,6 +37,14 @@ npm test
 9. เปลี่ยน `demoMode` เป็น `false` เมื่อครบขั้นตอน และ deploy frontend ใหม่ Host ต้องเปิดให้ลูกค้าเข้าถึงก่อนส่งลิงก์ให้บุคคลภายนอก Preview ของ Sites เป็น owner-private ตามค่าเริ่มต้น
 
 การอนุญาต Drive ใน Codex connector ไม่ได้ออก credentials ให้แอปนี้ แอปต้องมี OAuth ของตนเอง ส่วนนี้ยังไม่ได้ทำอัตโนมัติใน UI และต้องตั้งค่าก่อน
+
+### ตรวจปัญหาการเชื่อมต่อและเลือกโฟลเดอร์
+
+หน้า “การเชื่อมต่อ” ในโหมดจริงมีปุ่มตรวจสถานะล่าสุด แยกปัญหารหัสไม่ครบ, OAuth ใช้งานไม่ได้, Drive API ยังไม่เปิด, โฟลเดอร์เข้าถึงไม่ได้ และโฟลเดอร์อ่านได้อย่างเดียว Endpoint นี้ตรวจ Supabase Auth และ Sendfile admin allowlist ก่อนทุกครั้ง ไม่ส่ง access token, refresh token หรือ client secret กลับไปยัง browser
+
+ถ้ารหัส Google ใช้ได้แต่ยังเข้าถึงโฟลเดอร์ไม่ได้ ให้เปิด Google Picker API ใน Google Cloud project เดียวกับ OAuth client แล้วใช้ปุ่ม “เลือกโฟลเดอร์ผ่าน Google” ระบบใช้ OAuth Picker แบบ redirect ซึ่งรองรับ `drive.file` โดยเพิ่ม `trigger_onepick=true` และอนุญาตให้เลือกโฟลเดอร์ จากนั้นให้กลับมาตรวจการเชื่อมต่ออีกครั้ง หากจำเป็นต้องเปลี่ยน refresh token ให้แลก authorization code ใน OAuth Playground โดยใช้ OAuth credentials ของแอปเอง แล้วอัปเดต Supabase Secret เดิม ห้ามส่ง code หรือ token ผ่านแชต
+
+URL ของปุ่มใช้ callback OAuth Playground ที่ลงทะเบียนไว้สำหรับการตั้งค่าครั้งแรก ไม่ใช่ callback รับ token ของ Sendfile เอง แอปไม่อ่าน query หรือรับ code กลับจาก Playground ดู [คู่มือ Google OAuth Picker แบบ redirect](https://developers.google.com/workspace/drive/picker/guides/desktop-mobile-picker)
 
 ## โครงสร้าง
 
