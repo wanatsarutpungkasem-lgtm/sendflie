@@ -47,6 +47,24 @@ async function drive(path: string, token: string, init: RequestInit={}){
  if(!response.ok)throw new HttpError('Google Drive ไม่พร้อม หรือไม่มีสิทธิ์เข้าถึงโฟลเดอร์',503);
  return response.json();
 }
+async function driveStatus(){
+ if(!configured())return {ready:false,code:'missing_credentials',message:'ยังพบรหัสเชื่อมต่อไม่ครบ กรุณาตรวจ Secrets ทั้ง 3 รายการใน Supabase'};
+ const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:env('SENDFILE_GOOGLE_CLIENT_ID'),client_secret:env('SENDFILE_GOOGLE_CLIENT_SECRET'),refresh_token:env('SENDFILE_GOOGLE_REFRESH_TOKEN'),grant_type:'refresh_token'})});
+ const result=await response.json();
+ if(!response.ok||!result.access_token)return {ready:false,code:'oauth_failed',message:'Google ไม่ยอมรับรหัสเชื่อมต่อ กรุณาตรวจ Client ID, Client secret และ Refresh token ว่ามาจาก OAuth client เดียวกัน'};
+ const folder=await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(ROOT)}?fields=id,mimeType,trashed,capabilities(canAddChildren)&supportsAllDrives=true`,{headers:{Authorization:`Bearer ${result.access_token}`}});
+ const data=await folder.json();
+ if(!folder.ok){
+  const reasons=(data.error?.errors||[]).map((x:any)=>x.reason);
+  if(reasons.some((x:string)=>['accessNotConfigured','serviceDisabled'].includes(x))||data.error?.details?.some((x:any)=>x.reason==='SERVICE_DISABLED'))return {ready:false,code:'drive_api_disabled',message:'รหัสเชื่อมต่อใช้ได้ แต่ต้องเปิด Google Drive API ใน Google Cloud ก่อน'};
+  const authorize=new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  authorize.search=new URLSearchParams({client_id:env('SENDFILE_GOOGLE_CLIENT_ID'),redirect_uri:'https://developers.google.com/oauthplayground',scope:'https://www.googleapis.com/auth/drive.file',response_type:'code',access_type:'offline',prompt:'consent',include_granted_scopes:'false',trigger_onepick:'true',allow_folder_selection:'true',file_ids:ROOT,mimetypes:'application/vnd.google-apps.folder'}).toString();
+  return {ready:false,code:'folder_unavailable',message:'รหัสเชื่อมต่อ Google ใช้ได้แล้ว แต่แอปยังเข้าถึงโฟลเดอร์ sendfile ไม่ได้ ต้องเลือกโฟลเดอร์ให้แอปผ่าน Google Picker',authorize_url:authorize.href};
+ }
+ if(data.mimeType!=='application/vnd.google-apps.folder'||data.trashed)return {ready:false,code:'invalid_folder',message:'ปลายทางไม่ใช่โฟลเดอร์ที่ใช้งานได้ กรุณาตรวจโฟลเดอร์ใน Drive'};
+ if(data.capabilities?.canAddChildren!==true)return {ready:false,code:'folder_read_only',message:'บัญชี Google นี้ไม่มีสิทธิ์เพิ่มไฟล์ในโฟลเดอร์ sendfile'};
+ return {ready:true,code:'ready',message:'เชื่อมต่อ Google และมีสิทธิ์เพิ่มไฟล์ในโฟลเดอร์ sendfile แล้ว'};
+}
 async function route(req: Request, b: any){
  if(!b||typeof b!=='object'||Array.isArray(b))throw new HttpError('คำขอไม่ถูกต้อง');
  if(b.op==='portal-info'){
@@ -81,11 +99,12 @@ async function route(req: Request, b: any){
   return {completed:true};
  }
  await admin(req);
+ if(b.op==='drive-status')return await driveStatus();
  if(b.op==='admin-data'){
   const [customers,documents]=await Promise.all([db('sendfile_customers?select=*&order=created_at.desc'),db('sendfile_documents?select=*&order=created_at.desc&limit=1000')]);
-  let ready=false;
-  if(configured()){try{const t=await googleToken();const root=await drive(`files/${encodeURIComponent(ROOT)}?fields=id,mimeType,trashed,capabilities(canAddChildren)&supportsAllDrives=true`,t);ready=root.mimeType==='application/vnd.google-apps.folder'&&!root.trashed&&root.capabilities?.canAddChildren===true;}catch{/* UI shows pending rather than claiming a connection. */}}
-  return {customers,documents:documents.map((d:any)=>({...d,customer_name:customers.find((c:any)=>c.id===d.customer_id)?.name||''})),drive_ready:ready};
+  let status:any={ready:false,code:'unreachable',message:'ตรวจ Google Drive ไม่สำเร็จ กรุณาตรวจอีกครั้ง'};
+  try{status=await driveStatus();}catch{/* No provider credentials or responses are logged or returned. */}
+  return {customers,documents:documents.map((d:any)=>({...d,customer_name:customers.find((c:any)=>c.id===d.customer_id)?.name||''})),drive_ready:status.ready,drive_status:status};
  }
  if(b.op==='customer-create'){
   if(typeof b.name!=='string'||b.name.trim().length<1||b.name.trim().length>120||typeof b.code!=='string'||!/^[A-Za-z0-9_-]{1,30}$/.test(b.code))throw new HttpError('ชื่อลูกค้าหรือรหัสไม่ถูกต้อง');
