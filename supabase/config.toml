@@ -1,0 +1,4 @@
+[functions.sendfile-portal]
+# Portal requests use a random upload-only capability. Admin requests verify Auth
+# against Supabase Auth and then the separate sendfile_admins allowlist.
+verify_jwt = false

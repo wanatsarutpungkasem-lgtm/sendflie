@@ -1,0 +1,1 @@
+{"name":"sendfile","version":"0.1.0","private":true,"type":"module","scripts":{"dev":"python3 -m http.server 5184 --directory dist","test":"node --experimental-transform-types --test tests/*.test.js","check":"node --check dist/app.js && node --check dist/core.js"}}
