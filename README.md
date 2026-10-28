@@ -6,10 +6,10 @@
 
 - หน้ารับเอกสาร / ลูกค้า / เอกสาร / การเชื่อมต่อ พร้อมให้ทดลอง
 - เพิ่มตาราง Sendfile ใน Supabase `testwebsite` แล้ว โดยไม่เปลี่ยนตาราง `file_uploads` เดิม
-- Edge Function `sendfile-portal` deploy แล้ว ผู้ใช้ตั้งค่า Google OAuth secrets และกำหนดบัญชีผู้ดูแลแล้ว ยังต้องตรวจสิทธิ์โฟลเดอร์และทดสอบส่งไฟล์จริง
+- Edge Function `sendfile-portal` deploy แล้ว ตั้งค่า OAuth และบัญชีผู้ดูแลแล้ว ทดสอบอัปโหลดผ่านเว็บออนไลน์เข้า Drive จริงครบ JPG/PNG/HEIC/PDF เมื่อ 28 ต.ค. 2026
 - โฟลเดอร์หลักที่ผู้ใช้เลือก: https://drive.google.com/drive/folders/13g59K6moZp6Go7NnkaWoSsq5ORgbAo_p
 - หน้าหลักตั้ง `demoMode: false` และเปิดหน้าผู้ดูแลโดยตรง ลูกค้าส่งไฟล์ผ่านลิงก์ส่วนตัวที่สร้างจากหน้าลูกค้า
-- ยังต้องตั้ง Google OAuth และกำหนดผู้ดูแลก่อนเปิดรับไฟล์จริง ยังไม่ผ่าน end-to-end ทดสอบกับ Drive จริง
+- ยืนยันไฟล์ทดสอบทั้ง 4 ในโฟลเดอร์หลัก sendfile พร้อมขนาดและสถานะ completed ใน Supabase; ชุดทดสอบนี้ใช้ลูกค้า QA ที่ชี้โฟลเดอร์หลัก ยังไม่ครอบคลุมขั้นตอนสร้างโฟลเดอร์ลูกค้าใหม่
 - GitHub ที่ผู้ใช้เลือก: https://github.com/wanatsarutpungkasem-lgtm/sendflie ส่วน repository ของ Sites ใช้สำหรับเผยแพร่ตัวอย่าง
 
 ## รันและตรวจสอบ
@@ -63,6 +63,8 @@ URL ของปุ่มใช้ callback OAuth Playground ที่ลงท�
 ลูกค้าใช้ random capability 256-bit ผ่าน URL fragment เก็บเฉพาะ SHA-256 hash ในฐานข้อมูล ไม่มี read/list/download ของลูกค้า ลิงก์ใช้ได้ 30 วัน และปิดได้ ผู้ที่ได้ลิงก์ต่อจะส่งไฟล์ได้ จึงควรส่งเฉพาะผู้รับที่ต้องการ ลิงก์ไม่ยืนยันตัวบุคคล
 
 เพิ่มลูกค้าแล้วสร้างโฟลเดอร์ย่อย `${code} — ${name}` ใต้ sendfile เอกสารบันทึกเดือนและหมวดหมู่ใน Supabase ก่อน ในรุ่นนี้ไม่ได้สร้างโฟลเดอร์รายเดือนเพิ่ม
+
+Backend ส่ง Origin ที่ผ่าน allowlist ไปตอนเริ่ม resumable session เพื่อให้ Google ตอบ CORS สำหรับการ PUT จาก browser ได้
 
 อัปโหลดผ่าน Drive resumable session โดย browser ไม่ได้รับ Google access token URL session เป็น capability ชั่วคราวสำหรับไฟล์ที่กำหนด ห้าม log หรือแจกต่อ Backend ตรวจขนาด MIME parent folder และ appProperties จาก Drive ก่อนเปลี่ยนสถานะ completed การ retry หลัง complete response ผิดพลาดจะตรวจไฟล์เดิมแทนอัปโหลดซ้ำ
 
