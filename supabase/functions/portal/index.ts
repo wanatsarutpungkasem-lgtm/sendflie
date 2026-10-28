@@ -6,7 +6,7 @@ const SB = env('SUPABASE_URL');
 const SERVICE = env('SUPABASE_SERVICE_ROLE_KEY');
 const ROOT = env('SENDFILE_DRIVE_FOLDER_ID') || '13g59K6moZp6Go7NnkaWoSsq5ORgbAo_p';
 const configured = () => Boolean(ROOT && env('SENDFILE_GOOGLE_CLIENT_ID') && env('SENDFILE_GOOGLE_CLIENT_SECRET') && env('SENDFILE_GOOGLE_REFRESH_TOKEN'));
-const allowedOrigins = () => (env('SENDFILE_ALLOWED_ORIGINS') || 'https://sendfile-client-inbox.wanatsarut-p.chatgpt.site,http://localhost:5184,http://localhost:3000').split(',').map(x=>x.trim()).filter(Boolean);
+const allowedOrigins = () => (env('SENDFILE_ALLOWED_ORIGINS') || 'https://sendfile-client-inbox.wanatsarut-p.chatgpt.site,https://wanatsarutpungkasem-lgtm.github.io,http://localhost:5184,http://localhost:3000').split(',').map(x=>x.trim()).filter(Boolean);
 const uuid = (x: unknown) => typeof x === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x);
 class HttpError extends Error { constructor(message: string, public status=400){super(message);} }
 async function db(path: string, method='GET',body?: unknown) {
