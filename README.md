@@ -8,7 +8,7 @@
 - เพิ่มตาราง Sendfile ใน Supabase `testwebsite` แล้ว โดยไม่เปลี่ยนตาราง `file_uploads` เดิม
 - Edge Function `sendfile-portal` deploy แล้ว ผู้ใช้ตั้งค่า Google OAuth secrets และกำหนดบัญชีผู้ดูแลแล้ว ยังต้องตรวจสิทธิ์โฟลเดอร์และทดสอบส่งไฟล์จริง
 - โฟลเดอร์หลักที่ผู้ใช้เลือก: https://drive.google.com/drive/folders/13g59K6moZp6Go7NnkaWoSsq5ORgbAo_p
-- หน้าหลักตั้ง `demoMode: true` จึงไม่ส่งหรือเก็บไฟล์จริง การทดลองไม่เพิ่มเอกสารลงฐานข้อมูล
+- หน้าหลักตั้ง `demoMode: false` และเปิดหน้าผู้ดูแลโดยตรง ลูกค้าส่งไฟล์ผ่านลิงก์ส่วนตัวที่สร้างจากหน้าลูกค้า
 - ยังต้องตั้ง Google OAuth และกำหนดผู้ดูแลก่อนเปิดรับไฟล์จริง ยังไม่ผ่าน end-to-end ทดสอบกับ Drive จริง
 - GitHub ที่ผู้ใช้เลือก: https://github.com/wanatsarutpungkasem-lgtm/sendflie ส่วน repository ของ Sites ใช้สำหรับเผยแพร่ตัวอย่าง
 
@@ -34,7 +34,9 @@ npm test
 6. ตั้ง allowed origins ให้ตรงโดเมนจริง รวม localhost เฉพาะช่วงพัฒนา ค่า default มีเฉพาะ private preview และ localhost แล้ว
 7. เปิด `?mode=live` เลือกเมนูลูกค้า ล็อกอินผู้ดูแล และตรวจว่า Drive พร้อมรับไฟล์ จากนั้นเพิ่มลูกค้าและสร้างลิงก์ ลิงก์จะแสดงครั้งเดียว ต้องคัดลอกไว้เอง
 8. เปิดลิงก์ลูกค้าในอีก browser ส่งไฟล์ทดสอบ HEIC/JPG/PNG/PDF ตรวจทั้ง bytes ต้นฉบับใน Drive และสถานะ completed ในฐานข้อมูล แล้วทดสอบปิดลิงก์ / หมดอายุ / ข้ามลูกค้า
-9. เปลี่ยน `demoMode` เป็น `false` เมื่อครบขั้นตอน และ deploy frontend ใหม่ Host ต้องเปิดให้ลูกค้าเข้าถึงก่อนส่งลิงก์ให้บุคคลภายนอก Preview ของ Sites เป็น owner-private ตามค่าเริ่มต้น
+9. ตรวจโฮสต์ให้ลูกค้าเข้าถึงได้ก่อนส่งลิงก์ให้บุคคลภายนอก Preview ของ Sites เป็น owner-private ตามค่าเริ่มต้น ส่วน GitHub Pages ต้องเพิ่ม origin ของเว็บใน `SENDFILE_ALLOWED_ORIGINS` ด้วย
+
+บัญชีผู้ดูแลเก็บ access token, refresh token และเวลาหมดอายุใน sessionStorage ของแท็บ ต่ออายุผ่าน Supabase Auth เมื่อใกล้หมดอายุหรือเมื่อได้รับ 401 และลองคำขอซ้ำได้ครั้งเดียว เซสชันจากรุ่นเดิมที่ไม่มี refresh token ต้องเข้าสู่ระบบใหม่หนึ่งครั้ง
 
 การอนุญาต Drive ใน Codex connector ไม่ได้ออก credentials ให้แอปนี้ แอปต้องมี OAuth ของตนเอง ส่วนนี้ยังไม่ได้ทำอัตโนมัติใน UI และต้องตั้งค่าก่อน
 
