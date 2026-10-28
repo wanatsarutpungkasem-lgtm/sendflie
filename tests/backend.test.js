@@ -24,6 +24,18 @@ test('allowed CORS preflight succeeds',async()=>{
  const r=await handler(new Request('https://example.supabase.co',{method:'OPTIONS',headers:{Origin:'https://portal.example'}}));
  assert.equal(r.status,204);assert.equal(r.headers.get('Access-Control-Allow-Origin'),'https://portal.example');
 });
+test('local admin login origin passes preflight but still requires authentication',async()=>{
+ const configured=envValues.SENDFILE_ALLOWED_ORIGINS;
+ delete envValues.SENDFILE_ALLOWED_ORIGINS;
+ try{
+  for(const origin of ['http://localhost:3000','http://localhost:5184']){
+   const preflight=await handler(new Request('https://example.supabase.co',{method:'OPTIONS',headers:{Origin:origin}}));
+   assert.equal(preflight.status,204);assert.equal(preflight.headers.get('Access-Control-Allow-Origin'),origin);
+   assert.equal((await handler(request({op:'admin-data'},{Origin:origin}))).status,401);
+  }
+  assert.equal((await handler(request({op:'admin-data'},{Origin:'http://localhost:3001'}))).status,403);
+ }finally{envValues.SENDFILE_ALLOWED_ORIGINS=configured;}
+});
 test('unbounded bodies are refused and malformed JSON never becomes an internal error',async()=>{
  assert.equal((await handler(request({op:'x',data:'x'.repeat(13000)}))).status,413);
  assert.equal((await handler(new Request('https://example.supabase.co',{method:'POST',body:'{'}))).status,400);
