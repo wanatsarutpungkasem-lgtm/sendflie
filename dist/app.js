@@ -1,4 +1,5 @@
 import { escapeHTML as e, fileType, sizeLabel, validateFile, normalizeMime } from './core.js';
+import {refreshSession,sessionFromResponse} from './auth.js';
 const cfg = window.SENDFILE_CONFIG;
 const configuredBackend = Boolean(cfg.supabaseUrl && cfg.publishableKey);
 const live = configuredBackend && (cfg.demoMode === false || new URLSearchParams(location.search).get('mode') === 'live' || new URLSearchParams(location.hash.slice(1)).has('send'));
@@ -47,10 +48,20 @@ function toast(message) {
  $('#toast').textContent = message; $('#toast').classList.add('show');
  clearTimeout(toast.timer); toast.timer=setTimeout(()=>$('#toast').classList.remove('show'),4500);
 }
+let renewingSession=null;
+async function renewSession(){
+ if(!renewingSession)renewingSession=refreshSession(cfg,state.session).then(session=>{state.session=session;sessionStorage.setItem('sendfile-admin',JSON.stringify(session));}).catch(error=>{state.session=null;state.customers=[];state.documents=[];sessionStorage.removeItem('sendfile-admin');throw error;}).finally(()=>{renewingSession=null;});
+ return renewingSession;
+}
+function showApiError(error){
+ if(live&&!state.session&&!customerOnly){if($('#modal').open)$('#modal').close();render();}
+ toast(error.message);
+}
 async function api(op, data={}) {
- const headers={'Content-Type':'application/json',apikey:cfg.publishableKey};
- if (state.session?.access_token) headers.Authorization=`Bearer ${state.session.access_token}`;
- const res=await fetch(`${cfg.supabaseUrl}/functions/v1/${cfg.functionName}`, {method:'POST',headers,body:JSON.stringify({op,...data})});
+ if(state.session?.refresh_token&&state.session.expires_at<Date.now()/1000+30)await renewSession();
+ const send=()=>{const headers={'Content-Type':'application/json',apikey:cfg.publishableKey};if(state.session?.access_token)headers.Authorization=`Bearer ${state.session.access_token}`;return fetch(`${cfg.supabaseUrl}/functions/v1/${cfg.functionName}`,{method:'POST',headers,body:JSON.stringify({op,...data})});};
+ let res=await send();
+ if(res.status===401&&state.session){await renewSession();res=await send();}
  const result=await res.json().catch(()=>({error:'เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง'}));
  if(!res.ok) throw new Error(result.error || 'เชื่อมต่อไม่สำเร็จ');
  return result;
@@ -156,7 +167,7 @@ function settingsView(){
 async function refreshAdmin(){
  if(!live)return render();
  try{const data=await api('admin-data');state.customers=data.customers;state.documents=data.documents;state.driveReady=data.drive_ready;state.driveStatus=data.drive_status;render();}
- catch(err){toast(err.message);}
+ catch(err){showApiError(err);}
 }
 function showDialog(content){$('#modal').innerHTML=content;$('#modal').showModal();$('#modal').querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>$('#modal').close());}
 function newCustomer(){
@@ -166,7 +177,7 @@ function newCustomer(){
   try{const name=$('#customer-name').value.trim(),code=$('#customer-code').value.trim();if(!name)throw new Error('กรุณากรอกชื่อลูกค้า');
    if(live)await api('customer-create',{name,code});else state.customers.push({id:crypto.randomUUID(),name,code});
    $('#modal').close();await refreshAdmin();toast(live?'เพิ่มลูกค้าและโฟลเดอร์แล้ว':'เพิ่มลูกค้าตัวอย่างแล้ว');
-  }catch(err){$('#customer-error').textContent=err.message;}finally{button.disabled=false;}
+  }catch(err){if(live&&!state.session)showApiError(err);else $('#customer-error').textContent=err.message;}finally{button.disabled=false;}
  };
 }
 async function createLink(id,button){
@@ -175,7 +186,7 @@ async function createLink(id,button){
  try{const result=await api('link-create',{customer_id:id});const url=new URL(location.href);url.search='';url.hash=new URLSearchParams({send:result.token}).toString();
   showDialog(`<h2>ลิงก์ส่งเอกสารพร้อมแล้ว</h2><p class="subtitle">ผู้ที่มีลิงก์นี้ส่งไฟล์ได้อย่างเดียว ลิงก์หมดอายุใน 30 วัน เก็บลิงก์ไว้และส่งให้ลูกค้าด้วยตัวคุณเอง</p><p class="link-output" id="created-link"></p><div class="actions"><button class="btn" data-close>ปิด</button><button class="btn primary" id="copy-link">${icon('link')}คัดลอกลิงก์</button></div>`);$('#created-link').textContent=url.href;
   $('#copy-link').onclick=async()=>{try{await navigator.clipboard.writeText(url.href);toast('คัดลอกลิงก์แล้ว');}catch{toast('กรุณาเลือกและคัดลอกลิงก์ที่แสดง');}};
- }catch(err){toast(err.message);}finally{button.disabled=false;}
+ }catch(err){showApiError(err);}finally{button.disabled=false;}
 }
 function bind(){
  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=async()=>{if(state.sending){toast('กรุณารอให้ส่งไฟล์เสร็จก่อนเปลี่ยนหน้า');return;}state.view=b.dataset.view;render();if(live&&state.session&&state.view!=='upload')await refreshAdmin();});
@@ -188,7 +199,7 @@ function bind(){
  }
  if($('#login-form'))$('#login-form').onsubmit=async ev=>{ev.preventDefault();ev.submitter.disabled=true;$('#login-error').textContent='';
   try{const res=await fetch(`${cfg.supabaseUrl}/auth/v1/token?grant_type=password`,{method:'POST',headers:{'Content-Type':'application/json',apikey:cfg.publishableKey},body:JSON.stringify({email:$('#email').value,password:$('#password').value})});
-   const data=await res.json();if(!res.ok)throw new Error('อีเมลหรือรหัสผ่านไม่ถูกต้อง');state.session={access_token:data.access_token};
+   const data=await res.json();if(!res.ok)throw new Error('อีเมลหรือรหัสผ่านไม่ถูกต้อง');state.session=sessionFromResponse(data);
    await api('admin-data');sessionStorage.setItem('sendfile-admin',JSON.stringify(state.session));await refreshAdmin();
   }catch(err){state.session=null;$('#login-error').textContent=err.message;}finally{if($('#login-form'))$('#login-form button').disabled=false;}
  };
@@ -201,7 +212,7 @@ function bind(){
  if($('#search'))$('#search').oninput=ev=>{state.search=ev.target.value;const caret=ev.target.selectionStart;render();$('#search').focus();$('#search').setSelectionRange(caret,caret);};
  if($('#status-filter'))$('#status-filter').onchange=ev=>{state.filter=ev.target.value;render();};
  if($('#refresh'))$('#refresh').onclick=refreshAdmin;
- if($('#check-drive'))$('#check-drive').onclick=async ev=>{ev.currentTarget.disabled=true;try{const status=await api('drive-status');state.driveStatus=status;state.driveReady=status.ready;render();}catch(err){toast(err.message);if($('#check-drive'))$('#check-drive').disabled=false;}};
+ if($('#check-drive'))$('#check-drive').onclick=async ev=>{ev.currentTarget.disabled=true;try{const status=await api('drive-status');state.driveStatus=status;state.driveReady=status.ready;render();}catch(err){showApiError(err);if($('#check-drive'))$('#check-drive').disabled=false;}};
 }
 window.addEventListener('beforeunload',ev=>{if(state.sending){ev.preventDefault();ev.returnValue='';}});
 render();
