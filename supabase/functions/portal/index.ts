@@ -86,7 +86,10 @@ async function route(req: Request, b: any){
   const generated=await drive('files/generateIds?count=1&space=drive&type=files',token);
   const fileId=generated.ids[0]; const mime=normalizeMime(b.name,b.mime);
   const id=await db('rpc/sendfile_reserve_upload','POST',{p_hash:l.hash,p_name:b.name,p_size:b.size,p_mime:mime,p_period:b.period,p_category:b.category,p_note:b.note,p_drive_id:fileId});
-  const response=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json','X-Upload-Content-Type':mime,'X-Upload-Content-Length':String(b.size)},body:JSON.stringify({id:fileId,name:b.name,parents:[c.drive_folder_id],appProperties:{sendfile_document_id:id}})});
+  const uploadHeaders:Record<string,string>={Authorization:`Bearer ${token}`,'Content-Type':'application/json','X-Upload-Content-Type':mime,'X-Upload-Content-Length':String(b.size)};
+  // Google binds resumable-session CORS to the browser origin at initiation.
+  const browserOrigin=req.headers.get('Origin');if(browserOrigin)uploadHeaders.Origin=browserOrigin;
+  const response=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true',{method:'POST',headers:uploadHeaders,body:JSON.stringify({id:fileId,name:b.name,parents:[c.drive_folder_id],appProperties:{sendfile_document_id:id}})});
   const uploadUrl=response.headers.get('Location');
   if(!response.ok||!uploadUrl)throw new HttpError('เริ่มอัปโหลดไม่สำเร็จ กรุณาลองอีกครั้ง',503);
   return {document_id:id,upload_url:uploadUrl};
