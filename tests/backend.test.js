@@ -53,7 +53,7 @@ test('Drive diagnostics distinguish token, API and folder problems without retur
   const unavailable=await check();assert.equal(unavailable.code,'folder_unavailable');
   const url=new URL(unavailable.authorize_url);assert.equal(url.origin,'https://accounts.google.com');assert.equal(url.searchParams.get('scope'),'https://www.googleapis.com/auth/drive.file');assert.equal(url.searchParams.get('trigger_onepick'),'true');
   folderCode=403;reason='accessNotConfigured';assert.equal((await check()).code,'drive_api_disabled');
-  tokenOkay=false;assert.equal((await check()).code,'oauth_failed');
+  tokenOkay=false;const failed=await check();assert.equal(failed.code,'oauth_failed');assert.equal(failed.oauth_error,'invalid_grant');assert.ok(failed.message.includes('invalid_grant'));
   tokenOkay=true;folderCode=200;assert.equal((await check()).ready,true);
  }finally{globalThis.fetch=original;for(const key of ['SENDFILE_GOOGLE_CLIENT_ID','SENDFILE_GOOGLE_CLIENT_SECRET','SENDFILE_GOOGLE_REFRESH_TOKEN'])delete envValues[key];}
 });
