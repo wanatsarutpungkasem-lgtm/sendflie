@@ -28,7 +28,7 @@ test('local admin login origin passes preflight but still requires authenticatio
  const configured=envValues.SENDFILE_ALLOWED_ORIGINS;
  delete envValues.SENDFILE_ALLOWED_ORIGINS;
  try{
-  for(const origin of ['http://localhost:3000','http://localhost:5184']){
+  for(const origin of ['http://localhost:3000','http://localhost:5184','https://wanatsarutpungkasem-lgtm.github.io']){
    const preflight=await handler(new Request('https://example.supabase.co',{method:'OPTIONS',headers:{Origin:origin}}));
    assert.equal(preflight.status,204);assert.equal(preflight.headers.get('Access-Control-Allow-Origin'),origin);
    assert.equal((await handler(request({op:'admin-data'},{Origin:origin}))).status,401);
