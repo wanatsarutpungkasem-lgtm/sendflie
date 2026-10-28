@@ -1,7 +1,7 @@
 import { validateFile, normalizeMime } from './core.js';
 
 // Uses standard REST APIs; no third-party runtime dependencies.
-const env = (key: string) => Deno.env.get(key) || '';
+const env = (key: string) => (Deno.env.get(key) || '').trim();
 const SB = env('SUPABASE_URL');
 const SERVICE = env('SUPABASE_SERVICE_ROLE_KEY');
 const ROOT = env('SENDFILE_DRIVE_FOLDER_ID') || '13g59K6moZp6Go7NnkaWoSsq5ORgbAo_p';
@@ -51,7 +51,11 @@ async function driveStatus(){
  if(!configured())return {ready:false,code:'missing_credentials',message:'ยังพบรหัสเชื่อมต่อไม่ครบ กรุณาตรวจ Secrets ทั้ง 3 รายการใน Supabase'};
  const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:env('SENDFILE_GOOGLE_CLIENT_ID'),client_secret:env('SENDFILE_GOOGLE_CLIENT_SECRET'),refresh_token:env('SENDFILE_GOOGLE_REFRESH_TOKEN'),grant_type:'refresh_token'})});
  const result=await response.json();
- if(!response.ok||!result.access_token)return {ready:false,code:'oauth_failed',message:'Google ไม่ยอมรับรหัสเชื่อมต่อ กรุณาตรวจ Client ID, Client secret และ Refresh token ว่ามาจาก OAuth client เดียวกัน'};
+ if(!response.ok||!result.access_token){
+  const messages:Record<string,string>={invalid_client:'Google แจ้ง invalid_client: Client ID หรือ Client secret ไม่ถูกต้อง หรือไม่ได้เป็นคู่จาก OAuth client เดียวกัน',invalid_grant:'Google แจ้ง invalid_grant: Refresh token ใช้ไม่ได้ อาจถูกยกเลิก หมดอายุ หรือออกให้ OAuth client คนละตัว กรุณาออก Refresh token ใหม่ด้วย Client ID/Secret คู่นี้',unauthorized_client:'Google แจ้ง unauthorized_client: OAuth client นี้ยังไม่ได้รับอนุญาตให้ใช้วิธีเชื่อมต่อนี้',invalid_request:'Google แจ้ง invalid_request: ข้อมูลรหัสเชื่อมต่อมีรูปแบบไม่ถูกต้อง กรุณาตรวจค่าที่บันทึกใน Secrets'};
+  const known=typeof result.error==='string'&&Object.hasOwn(messages,result.error);
+  return {ready:false,code:'oauth_failed',oauth_error:known?result.error:'unknown',message:known?messages[result.error]:'ตรวจรหัสเชื่อมต่อกับ Google ไม่สำเร็จ กรุณาลองอีกครั้งหรือตรวจ Secrets ของแอป'};
+ }
  const folder=await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(ROOT)}?fields=id,mimeType,trashed,capabilities(canAddChildren)&supportsAllDrives=true`,{headers:{Authorization:`Bearer ${result.access_token}`}});
  const data=await folder.json();
  if(!folder.ok){
