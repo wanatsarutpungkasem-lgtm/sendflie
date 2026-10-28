@@ -1,11 +1,12 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 let handler;
-globalThis.Deno={env:{get:key=>({SUPABASE_URL:'https://example.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'server-secret',SENDFILE_ALLOWED_ORIGINS:'https://portal.example'}[key])},serve:fn=>{handler=fn;}};
+const envValues={SUPABASE_URL:'https://example.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'server-secret',SENDFILE_ALLOWED_ORIGINS:'https://portal.example'};
+globalThis.Deno={env:{get:key=>envValues[key]},serve:fn=>{handler=fn;}};
 await import('../supabase/functions/portal/index.ts');
 const request=(body,headers={})=>new Request('https://example.supabase.co/functions/v1/sendfile-portal',{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(body)});
 test('anonymous callers cannot access any admin operation',async()=>{
- for(const op of ['admin-data','customer-create','link-create','link-revoke']){
+ for(const op of ['admin-data','customer-create','link-create','link-revoke','drive-status']){
   const r=await handler(request({op}));assert.equal(r.status,401);
   assert.ok(!(await r.text()).includes('server-secret'));
  }
@@ -32,4 +33,27 @@ test('a valid Supabase account without Sendfile permissions cannot become admin'
  const original=globalThis.fetch;
  globalThis.fetch=async url=>String(url).includes('/auth/v1/user')?Response.json({id:'11111111-1111-4111-8111-111111111111'}):Response.json([]);
  try{assert.equal((await handler(request({op:'admin-data'},{Authorization:'Bearer valid-user-token'}))).status,403);}finally{globalThis.fetch=original;}
+});
+test('Drive diagnostics distinguish token, API and folder problems without returning credentials',async()=>{
+ const original=globalThis.fetch;
+ Object.assign(envValues,{SENDFILE_GOOGLE_CLIENT_ID:'123-test.apps.googleusercontent.com',SENDFILE_GOOGLE_CLIENT_SECRET:'private-client-secret',SENDFILE_GOOGLE_REFRESH_TOKEN:'private-refresh-token'});
+ let tokenOkay=true,folderCode=404,reason='notFound';
+ globalThis.fetch=async url=>{
+  if(String(url).includes('/auth/v1/user'))return Response.json({id:'11111111-1111-4111-8111-111111111111'});
+  if(String(url).includes('/rest/v1/sendfile_admins'))return Response.json([{user_id:'11111111-1111-4111-8111-111111111111'}]);
+  if(String(url).includes('oauth2.googleapis.com/token'))return tokenOkay?Response.json({access_token:'private-access-token'}):Response.json({error:'invalid_grant'},{status:400});
+  return folderCode===200?Response.json({mimeType:'application/vnd.google-apps.folder',capabilities:{canAddChildren:true}}):Response.json({error:{errors:[{reason}]}},{status:folderCode});
+ };
+ const check=async()=>{
+  const response=await handler(request({op:'drive-status'},{Authorization:'Bearer valid-admin-token'}));assert.equal(response.status,200);
+  const text=await response.text();for(const secret of ['private-client-secret','private-refresh-token','private-access-token','server-secret'])assert.ok(!text.includes(secret));
+  return JSON.parse(text);
+ };
+ try{
+  const unavailable=await check();assert.equal(unavailable.code,'folder_unavailable');
+  const url=new URL(unavailable.authorize_url);assert.equal(url.origin,'https://accounts.google.com');assert.equal(url.searchParams.get('scope'),'https://www.googleapis.com/auth/drive.file');assert.equal(url.searchParams.get('trigger_onepick'),'true');
+  folderCode=403;reason='accessNotConfigured';assert.equal((await check()).code,'drive_api_disabled');
+  tokenOkay=false;assert.equal((await check()).code,'oauth_failed');
+  tokenOkay=true;folderCode=200;assert.equal((await check()).ready,true);
+ }finally{globalThis.fetch=original;for(const key of ['SENDFILE_GOOGLE_CLIENT_ID','SENDFILE_GOOGLE_CLIENT_SECRET','SENDFILE_GOOGLE_REFRESH_TOKEN'])delete envValues[key];}
 });
